@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import logging
+import time
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,205 +18,91 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+import time
+
 
 # -------------------------------------------------
-# Connessione amministrativa per bootstrap
+# Lettura titoli monitorati
 # -------------------------------------------------
 
-def bootstrap_database():
-
-    logger.info("Starting database bootstrap")
-
-    logger.info(
-        "Connecting to PostgreSQL as ADMIN host=%s database=%s user=%s",
-        os.environ["DB_HOST"],
-        os.environ["ADMIN_DB"],
-        os.environ["ADMIN_USER"]
-    )
-
-    logger.info(
-        "Connecting to PostgreSQL as APP host=%s database=%s user=%s",
-        os.environ["DB_HOST"],
-        os.environ["APP_DB"],
-        os.environ["APP_USER"]
-    )
-
-
-    conn = psycopg2.connect(
-        host=os.environ["DB_HOST"],
-        database=os.environ["ADMIN_DB"],
-        user=os.environ["ADMIN_USER"],
-        password=os.environ["ADMIN_PASSWORD"]
-    )
-
-    logger.info(
-        "Connect as %s host=%s database=%s ",
-        os.environ["ADMIN_USER"],
-        os.environ["DB_HOST"],
-        os.environ["ADMIN_DB"],
-        
-    )
-
-    conn.autocommit = True
-
+def get_monitored_symbols():
+    conn = get_app_connection()
     cur = conn.cursor()
-
     cur.execute("""
-      SELECT
-      current_user,
-      session_user,
-      current_database();
-      """)
+        SELECT symbol
+        FROM monitored_symbols
+        WHERE enabled = TRUE
+        ORDER BY symbol
+    """)
+    symbols = [row[0] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return symbols
 
-    current_user, session_user, current_db = cur.fetchone()
+# -------------------------------------------------
+# Salvataggio quotazione
+# -------------------------------------------------
 
-    logger.info(
-      "1.Connected --------------> as current_user=%s session_user=%s database=%s",
-      current_user,
-      session_user,
-      current_db
-    )
-
-
-    db_name = os.environ["APP_DB"]
-    app_user = os.environ["APP_USER"]
-    app_password = os.environ["APP_PASSWORD"]
-
-    logger.info("Checking database: %s", db_name)
-    # Crea database se non esiste
-    cur.execute(
-        "SELECT 1 FROM pg_database WHERE datname=%s",
-        (db_name,)
-    )
-
-    if cur.fetchone() is None:
-        logger.info("Creating database: %s", db_name)
-        cur.execute(
-            f"CREATE DATABASE {db_name}"
+def save_quote(symbol, data):
+    conn = get_app_connection()
+    cur = conn.cursor()
+    logger.info("Save: %s quotation.", symbol )
+    cur.execute("""
+        INSERT INTO market_quotes (
+            symbol,
+            quote_time,
+            price,
+            change_value,
+            change_percent,
+            day_high,
+            day_low,
+            day_open,
+            previous_close
         )
-
-
-    logger.info("Checking user %s on DB",app_user)
-    
-    # Crea utente applicativo se non esiste
-    cur.execute(
-        "SELECT 1 FROM pg_roles WHERE rolname=%s",
-        (app_user,)
-    )
-
-    if cur.fetchone() is None:
-        logger.info("Creating user %s on DB",app_user)
-        cur.execute(
-            f"CREATE USER {app_user} PASSWORD '{app_password}'"
+        VALUES (
+            %s,%s,%s,%s,%s,%s,%s,%s,%s
         )
-
+    """,
+    (
+        symbol,
+        datetime.now(ZoneInfo("UTC")),
+        data.get("c"),
+        data.get("d"),
+        data.get("dp"),
+        data.get("h"),
+        data.get("l"),
+        data.get("o"),
+        data.get("pc")
+    ))
+    conn.commit()
     cur.close()
     conn.close()
 
-    conn = psycopg2.connect(
-        host=os.environ["DB_HOST"],
-        database=os.environ["APP_DB"],
-        user=os.environ["ADMIN_USER"],
-        password=os.environ["ADMIN_PASSWORD"]
-    )
+# -------------------------------------------------
+# Ciclo raccolta dati
+# -------------------------------------------------
 
-    logger.info(
-        "Connect as %s host=%s ",
-        os.environ["ADMIN_USER"],
-        os.environ["DB_HOST"]
-    )
-
-    conn.autocommit = True
-
-    cur = conn.cursor()
-    cur.execute("""
-      SELECT
-      current_user,
-      session_user,
-      current_database();
-      """)
-
-    current_user, session_user, current_db = cur.fetchone()
-
-    logger.info(
-      "2.Connected --------------> as current_user=%s session_user=%s database=%s",
-      current_user,
-      session_user,
-      current_db
-    )
-
-    db_name = os.environ["APP_DB"]
-    app_user = os.environ["APP_USER"]
-    app_password = os.environ["APP_PASSWORD"]
-
-
-
-    # Assegna permessi sul database
-    cur.execute(
-        f"GRANT ALL PRIVILEGES ON DATABASE quantica_db TO quantica_usr"
-    )
-    cur.execute(
-        f"GRANT ALL PRIVILEGES ON SCHEMA public TO quantica_usr"
-    )
-
-    # Assegna permessi sul database
-    cur.execute(
-        f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {app_user}"
-    )
-    logger.info("Give GRANT to user %s on DB %s ",app_user,db_name)
-
-    cur.execute(
-       f"GRANT USAGE, CREATE ON SCHEMA public TO {app_user}"
-    )
-
-    logger.info(
-       "Granted USAGE, CREATE on schema public to %s",
-       app_user
-    )
-
-    cur.execute(
-      f"ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-      f"GRANT ALL ON TABLES TO {app_user}"
-    )
-
-    logger.info(
-       "ALTER DEFAULT PRIVILEGES ON TABLES "
-    )
-
-    cur.execute(
-      f"ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-      f"GRANT ALL ON SEQUENCES TO {app_user}"
-    )
-
-    logger.info(
-       "ALTER DEFAULT PRIVILEGES ON SEQUENCES "
-    )
-
-
-    cur.execute("""
-      SELECT
-        datname,
-        pg_catalog.pg_get_userbyid(datdba) AS owner,
-        datacl
-      FROM pg_database
-      WHERE datname = %s
-    """, (db_name,))
-
-    row = cur.fetchone()
-
-    logger.info(
-      "Database=%s Owner=%s ACL=%s",
-      row[0],
-      row[1],
-      row[2]
-    )    
-    
-    cur.close()
-    conn.close()
-    
-    logger.info("Database bootstrap completed")
-
-
+def collect_market_quotes():
+    symbols = get_monitored_symbols()
+    logger.info("Symbols to monitor: %s", symbols )
+    for symbol in symbols:
+        try:
+            logger.info(
+                "Request quote for %s",
+                symbol
+            )
+            data = get_quote(symbol)
+            logger.info(
+                "%s quote received: %s",
+                symbol,
+                data
+            )
+            save_quote(
+                symbol,
+                data
+            )
+        except Exception as e:
+            logger.error("Error processing %s: %s",    symbol,  e  )
 
 # -------------------------------------------------
 # Connessione applicativa
@@ -300,8 +188,8 @@ def initialize_database():
     """)
 
     cur.execute("""
-            CREATE INDEX idx_market_quotes_symbol_time
-              ON market_quotes(symbol, quote_time DESC);
+      CREATE INDEX IF NOT EXISTS idx_market_quotes_symbol_time
+        ON market_quotes(symbol, quote_time DESC);
     """)
     conn.commit()
 
@@ -380,22 +268,24 @@ from finnhub_client import get_quote
 
 
 def main():
-
-    print("Quantica bootstrap database...")
-    # usa admin_usr
-    bootstrap_database()
     print("Initialize application database...")
-    # usa quantica_app_usr
     initialize_database()
-    print("Starting Quantica Welcome...")
+    print("Starting Trading LAB Welcome...")
 
-    symbol="AAPL"
-
-    data=get_quote(symbol)
-
-    print(data)
-
-
+# Inizio Attivita'
+    logger.info( "Market collection Starting"   )
+    for cycle in range(1, 11):
+        logger.info(
+            "===== Market collection cycle %s/10 =====",
+            cycle
+        )
+        collect_market_quotes()
+        if cycle < 10:
+            logger.info(
+                "Waiting 5 minutes before next cycle..."
+            )
+            time.sleep(300)
+    logger.info("Market collection completed")
 
 if __name__=="__main__":
     main()
