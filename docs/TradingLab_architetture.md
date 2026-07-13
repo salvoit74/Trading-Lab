@@ -29,6 +29,7 @@ L'applicazione utilizza:
 * PostgreSQL
 * REST API
 * HTML/CSS/Javascript
+* Modulo finnhub-python  https://github.com/Finnhub-Stock-API/finnhub-python
 
 L'applicazione utilizza il database PostgreSQL condiviso della piattaforma Quantica ma possiede:
 

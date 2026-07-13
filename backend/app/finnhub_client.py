@@ -1,26 +1,25 @@
-import os
-import requests
 
 
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+import finnhub
+from config import FINNHUB_API_KEY
 
+class FinnhubProvider:
 
-def get_quote(symbol):
+    def __init__(self, api_key=None):
+        if api_key is None:
+            api_key = FINNHUB_API_KEY
+        self.client = finnhub.Client(api_key=api_key)
 
-    if not FINNHUB_API_KEY:
-        raise Exception("FINNHUB_API_KEY missing")
+    def get_quote(self, symbol):
+        return self.client.quote(symbol)
 
-    print(f"Using Finnhub key: {FINNHUB_API_KEY[:5]}*****")
+    def get_company_profile(self, symbol):
+        return self.client.company_profile2(symbol=symbol)
 
-    url = "https://finnhub.io/api/v1/quote"
-
-    params = {
-        "symbol": symbol,
-        "token": FINNHUB_API_KEY
-    }
-
-    response = requests.get(url, params=params)
-
-    response.raise_for_status()
-
-    return response.json()
+    def get_candles(self, symbol, resolution, start, end):
+        return self.client.stock_candles(
+            symbol,
+            resolution,
+            start,
+            end
+        )
