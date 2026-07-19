@@ -4,6 +4,7 @@ import time
 
 from services.market_data_service import MarketDataService
 from database.initializer import initialize_database
+from services.maintenance.maintenance_service import MaintenanceService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,18 +29,16 @@ def main():
 # Inizio Attivita'
     logger.info( "Market collection Starting"   )
     market_service = MarketDataService()
-    for cycle in range(1, 11):
-        logger.info(
-            "===== Market collection cycle %s/10 =====",
-            cycle
-        )
-        market_service.collect_quotes()
-        if cycle < 10:
-            logger.info(
-                "Waiting 5 minutes before next cycle..."
-            )
-            time.sleep(300)
-    logger.info("Market collection completed")
+    maintenance_service = MaintenanceService()
+    INTERVAL = 65
+    while True:
+      logger.info( "===== Market collection cycle =====",)
+      start = time.time()
+      market_service.collect_quotes()
+      maintenance_service.run()
+      elapsed = time.time() - start
+      wait = max(0, INTERVAL - elapsed)
+      time.sleep(wait)
 
 if __name__=="__main__":
     main()
