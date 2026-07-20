@@ -13,7 +13,9 @@ REQUIRED_TABLES = [
     "market_quotes",
     "indicators",
     "symbol_indicators",
-    "indicator_values"
+    "indicator_values",
+    "database_info",
+    "maintenance_tasks"
 ]
 
 def database_exists(conn):

@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from decimal import Decimal
 
 from database.initializer import get_app_connection
+from services.indicators.indicator_engine import IndicatorEngine
 from finnhub_client import FinnhubProvider
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,28 @@ class MarketDataService:
                     quote
                 )
                 current_price = Decimal(str(quote.get("c")))
-                last_price = self.get_last_price(symbol)
+                last_price = Decimal(str(self.get_last_price(symbol)))
                 if last_price != current_price:
                   logger.info(
                     "%s cambio di prezzo %s <> %s",
                     symbol,
-                    last_price,
-                    current_price
+                    last_price.normalize(),
+                    current_price.normalize()
                   )
+                  #
+                  # SAVE QUOTA 
+                  #
                   self.save_quote(symbol, quote)
+                  #
+                  # Calculate INDICATOR
+                  #
+                  conn = get_app_connection()
+                  try:
+                    engine = IndicatorEngine(conn)
+                    engine.calculate_all( symbol)
+                  finally:
+                    conn.close()
+                # SAVE QUESTION TIME in any case
                 self.update_symbol_execution(
                   symbol,
                   current_price
@@ -49,6 +63,7 @@ class MarketDataService:
                     symbol,
                     e
                 )
+        logger.info("===== Market collection Complete =====")
 
     def get_monitored_symbols(self):
         conn = get_app_connection()

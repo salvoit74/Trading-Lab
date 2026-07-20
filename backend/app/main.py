@@ -35,7 +35,9 @@ def main():
       logger.info( "===== Market collection cycle =====",)
       start = time.time()
       market_service.collect_quotes()
+      logger.info( "===== Export DB once per day =====",)
       maintenance_service.run()
+      logger.info( "===== Wait =====",)
       elapsed = time.time() - start
       wait = max(0, INTERVAL - elapsed)
       time.sleep(wait)

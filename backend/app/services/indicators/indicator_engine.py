@@ -1,9 +1,13 @@
 import logging
-
+from services.indicators.sma import SMA
+from services.indicators.ema import EMA
+from services.indicators.rsi import RSI
+from services.indicators.macd import MACD
+from services.indicators.bollinger import BOLLINGER
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from app.services.indicators.sma import SMA
+from services.indicators.sma import SMA
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +21,12 @@ class IndicatorEngine:
         # Registered indicators
         #
         self.indicators = {
-            "SMA": SMA
+          "SMA": SMA,
+          "EMA": EMA,
+          "RSI": RSI,
+          "MACD": MACD,
+          "BOLLINGER": BOLLINGER
         }
-
 
     def calculate_all(
         self,
@@ -71,20 +78,24 @@ class IndicatorEngine:
             )
             return
         #
-        # only one parameter for SMA
-        #
-        period = int(parameters)
-        prices = self.get_prices(
+        try:
+          indicator_class = self.indicators[indicator_name]
+          indicator = indicator_class(parameters)
+          prices = self.get_prices(
             symbol,
-            period
-        )
-        indicator = self.indicators[indicator_name](
-            period
-        )
-        value = indicator.calculate(
-            prices
-        )
-        if value is None:
+            indicator.required_history()
+          )
+          values = indicator.calculate(prices)
+        except Exception as e:
+          logger.error(
+            "Error calculating %s(%s) for %s: %s",
+            indicator_name,
+            parameters,
+            symbol,
+            e
+          )
+          return
+        if values is None:
             logger.info(
                 "%s(%s) skipped for %s",
                 indicator_name,
@@ -96,13 +107,14 @@ class IndicatorEngine:
             symbol,
             indicator_name,
             parameters,
-            value
+            values
         )
         logger.info(
-            "%s(%s) = %.4f",
+            "%s %s(%s) = %s",
+            symbol,
             indicator_name,
             parameters,
-            value
+            values
         )
 
     def get_prices(
@@ -131,13 +143,35 @@ class IndicatorEngine:
             for row in reversed(rows)
         ]
 
+    def get_last_quote_time(
+      self,
+      symbol
+    ):
+      cur = self.db_connection.cursor()
+      cur.execute(
+        """
+        SELECT quote_time
+        FROM market_quotes
+        WHERE symbol = %s
+        ORDER BY quote_time DESC
+        LIMIT 1
+        """,
+        (symbol,)
+      )
+      row = cur.fetchone()
+      cur.close()
+      if row:
+        return row[0]
+      return None
+
     def save_indicator(
         self,
         symbol,
         indicator,
         parameters,
-        value
+        values
     ):
+        quote_time = self.get_last_quote_time(symbol)
         cur = self.db_connection.cursor()
         cur.execute(
             """
@@ -147,11 +181,13 @@ class IndicatorEngine:
                 indicator,
                 parameters,
                 quote_time,
-                value1
+                value1,
+                value2,
+                value3
             )
             VALUES
             (
-                %s,%s,%s,%s,%s
+                %s,%s,%s,%s,%s,%s,%s
             )
             ON CONFLICT
             (
@@ -166,10 +202,10 @@ class IndicatorEngine:
                 symbol,
                 indicator,
                 parameters,
-                datetime.now(
-                    ZoneInfo("UTC")
-                ),
-                value
+                quote_time,
+                values.get("value1"),
+                values.get("value2"),
+                values.get("value3")
             )
         )
         self.db_connection.commit()

@@ -89,6 +89,8 @@ class MaintenanceService:
 
             else:
 
+                if last_execution.tzinfo is None:
+                   last_execution = last_execution.replace(tzinfo=ZoneInfo("UTC"))
                 elapsed = (
                     datetime.now(
                         ZoneInfo("UTC")

@@ -114,7 +114,8 @@ def export_structure():
             "--data-only",
             "--table=indicators",
             "--table=monitored_symbols",
-            "--table=symbol_indicators"
+            "--table=symbol_indicators",
+            "--table=maintenance_tasks"
         ],
         SEED_FILE
     )

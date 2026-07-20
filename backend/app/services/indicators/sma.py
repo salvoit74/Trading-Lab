@@ -1,23 +1,22 @@
 class SMA:
     """
-    Simple Moving Average indicator
+    Simple Moving Average
     """
 
     def __init__(self, period):
-        self.period = period
+        self.period = int(period)
 
+    def required_history(self):
+        return self.period
 
     def calculate(self, prices):
-        """
-        Calculate SMA.
-
-        prices:
-            list of numeric values ordered oldest -> newest
-        """
-
         if len(prices) < self.period:
             return None
-
-        values = prices[-self.period:]
-
-        return sum(values) / self.period
+        value = sum(
+            prices[-self.period:]
+        ) / self.period
+        return {
+            "value1": value,
+            "value2": None,
+            "value3": None
+        }
