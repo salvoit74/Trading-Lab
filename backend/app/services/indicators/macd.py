@@ -1,3 +1,7 @@
+
+
+from decimal import Decimal
+
 class MACD:
     """
     Moving Average Convergence Divergence
@@ -24,12 +28,15 @@ class MACD:
         if len(prices) < period:
             return None
         multiplier = 2 / (period + 1)
+        multiplier=Decimal(str(multiplier))
         ema = (
             sum(prices[:period])
             /
             period
         )
+        ema=Decimal(str(ema))
         for price in prices[period:]:
+            price=Decimal(str(price))
             ema = (
                 (price - ema)
                 * multiplier

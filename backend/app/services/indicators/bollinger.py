@@ -1,5 +1,5 @@
 import statistics
-
+from decimal import Decimal
 
 class BOLLINGER:
     """
@@ -39,24 +39,26 @@ class BOLLINGER:
             /
             self.period
         )
+        middle=Decimal(str(middle))
 
 
         stddev = statistics.stdev(
             values
         )
+        stddev=Decimal(str(stddev))
 
-
+        deviation=Decimal(str(self.deviation))
         upper = (
             middle
             +
-            self.deviation * stddev
+            deviation * stddev
         )
 
 
         lower = (
             middle
             -
-            self.deviation * stddev
+            deviation * stddev
         )
 
 
